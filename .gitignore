@@ -47,3 +47,6 @@ downloaded_files/
 
 # Archives
 archives/
+
+# Debugging
+debug_html/

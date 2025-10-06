@@ -190,153 +190,97 @@ class WilsonArchiveScraper:
         except:
             return None
 
+    def _get_information_block(self, title: str) -> Optional[str]:
+        """Extract text from information block by title"""
+        try:
+            # Find all information blocks
+            blocks = self.driver.find_elements("css selector", ".information-block")
+            for block in blocks:
+                try:
+                    subtitle = block.find_element("css selector", ".sub-title")
+                    if subtitle and title.lower() in subtitle.text.lower():
+                        # Try to get text from .text div
+                        text_div = block.find_element("css selector", ".text")
+                        return text_div.text.strip() if text_div.text.strip() else None
+                except:
+                    continue
+            return None
+        except:
+            return None
+
+    def _get_pill_list(self, title: str) -> Optional[str]:
+        """Extract pill list items (authors, places, etc.) by section title"""
+        try:
+            # Find all pill blocks AND information blocks (some pills are in information blocks)
+            blocks = self.driver.find_elements(
+                "css selector", ".pill-block, .information-block"
+            )
+            for block in blocks:
+                try:
+                    # Look for the title (h3.title for pill-blocks, h3.sub-title for information-blocks)
+                    title_els = block.find_elements(
+                        "css selector", "h3.title, h4.title, h3.sub-title"
+                    )
+                    for title_el in title_els:
+                        if title.lower() in title_el.text.lower():
+                            # Found the right section, now get pill names
+                            # Try nested span first (for places, people)
+                            pills = block.find_elements(
+                                "css selector", ".pill .name span"
+                            )
+                            if not pills:
+                                # Fall back to direct .name (for subjects, language)
+                                pills = block.find_elements(
+                                    "css selector", ".pill .name"
+                                )
+                            if pills:
+                                names = [
+                                    p.text.strip() for p in pills if p.text.strip()
+                                ]
+                                return json.dumps(names) if names else None
+                except:
+                    continue
+            return None
+        except:
+            return None
+
     def scrape_document(self, document_url: str) -> Dict:
         """Scrape metadata from a single document page"""
         print(f"Scraping document: {document_url}")
 
         self.driver.get(document_url)
-        time.sleep(2)  # Wait for page to load
+        time.sleep(3)  # Wait for page to load
 
         # Extract all metadata fields
         metadata = {
             "document_url": document_url,
             "original_publication_date": self._get_text_safe(".date"),
-            "title": self._get_text_safe(".title"),
+            "title": self._get_text_safe("h1.title"),
             "credits": self._get_text_safe(".donated"),
-            "text_body": self._get_text_safe(".Textbody"),
-            "summary": self._get_text_safe(".text-block"),
+            "text_body": self._get_text_safe(".tab-pane.active"),  # Full transcript
+            "summary": self._get_text_safe(".text-block"),  # Summary text
             "scraped_at": datetime.now().isoformat(),
         }
 
-        # Extract pill lists (multiple items with class="name")
-        # We need to be more specific with selectors to target the right sections
+        # Extract data using the new helper methods
+        metadata["authors"] = self._get_pill_list("Author")
+        metadata["associated_places"] = self._get_pill_list("Associated Places")
+        metadata["subjects_discussed"] = self._get_pill_list("Subjects Discussed")
+        metadata["associated_people_orgs"] = self._get_pill_list("Associated People")
 
-        # Authors
-        try:
-            author_elements = self.driver.find_elements(
-                "css selector", "div.field--name-field-authors .name"
-            )
-            authors = [el.text.strip() for el in author_elements if el.text.strip()]
-            metadata["authors"] = json.dumps(authors) if authors else None
-        except:
-            metadata["authors"] = None
-
-        # Associated Places
-        try:
-            place_elements = self.driver.find_elements(
-                "css selector", "div.field--name-field-places .name"
-            )
-            places = [el.text.strip() for el in place_elements if el.text.strip()]
-            metadata["associated_places"] = json.dumps(places) if places else None
-        except:
-            metadata["associated_places"] = None
-
-        # Subjects Discussed
-        try:
-            subject_elements = self.driver.find_elements(
-                "css selector", "div.field--name-field-topics .name"
-            )
-            subjects = [el.text.strip() for el in subject_elements if el.text.strip()]
-            metadata["subjects_discussed"] = json.dumps(subjects) if subjects else None
-        except:
-            metadata["subjects_discussed"] = None
-
-        # Associated People & Organizations
-        try:
-            people_elements = self.driver.find_elements(
-                "css selector", "div.field--name-field-people-orgs .name"
-            )
-            people = [el.text.strip() for el in people_elements if el.text.strip()]
-            metadata["associated_people_orgs"] = json.dumps(people) if people else None
-        except:
-            metadata["associated_people_orgs"] = None
-
-        # Source (class="text")
-        try:
-            source_element = self.driver.find_element(
-                "css selector", "div.field--name-field-source .text"
-            )
-            metadata["source"] = (
-                source_element.text.strip() if source_element.text.strip() else None
-            )
-        except:
-            metadata["source"] = None
-
-        # Original Upload Date (class="text")
-        try:
-            upload_element = self.driver.find_element(
-                "css selector", "div.field--name-field-date-uploaded .text"
-            )
-            metadata["original_upload_date"] = (
-                upload_element.text.strip() if upload_element.text.strip() else None
-            )
-        except:
-            metadata["original_upload_date"] = None
-
-        # Original Archive Title (class="name")
-        try:
-            archive_element = self.driver.find_element(
-                "css selector", "div.field--name-field-original-archive .name"
-            )
-            metadata["original_archive_title"] = (
-                archive_element.text.strip() if archive_element.text.strip() else None
-            )
-        except:
-            metadata["original_archive_title"] = None
-
-        # Language (class="name")
-        try:
-            language_element = self.driver.find_element(
-                "css selector", "div.field--name-field-language .name"
-            )
-            metadata["language"] = (
-                language_element.text.strip() if language_element.text.strip() else None
-            )
-        except:
-            metadata["language"] = None
-
-        # Rights (class="text")
-        try:
-            rights_element = self.driver.find_element(
-                "css selector", "div.field--name-field-rights .text"
-            )
-            metadata["rights"] = (
-                rights_element.text.strip() if rights_element.text.strip() else None
-            )
-        except:
-            metadata["rights"] = None
-
-        # Record ID (class="text")
-        try:
-            record_element = self.driver.find_element(
-                "css selector", "div.field--name-field-record-id .text"
-            )
-            metadata["record_id"] = (
-                record_element.text.strip() if record_element.text.strip() else None
-            )
-        except:
-            metadata["record_id"] = None
-
-        # Original Classification (class="text")
-        try:
-            class_element = self.driver.find_element(
-                "css selector", "div.field--name-field-original-classification .text"
-            )
-            metadata["original_classification"] = (
-                class_element.text.strip() if class_element.text.strip() else None
-            )
-        except:
-            metadata["original_classification"] = None
-
-        # Donors (class="name") - multiple
-        try:
-            donor_elements = self.driver.find_elements(
-                "css selector", "div.field--name-field-donors .name"
-            )
-            donors = [el.text.strip() for el in donor_elements if el.text.strip()]
-            metadata["donors"] = json.dumps(donors) if donors else None
-        except:
-            metadata["donors"] = None
+        # Extract information blocks
+        metadata["source"] = self._get_information_block("Source")
+        metadata["original_upload_date"] = self._get_information_block(
+            "Original Uploaded Date"
+        )
+        metadata["original_archive_title"] = self._get_pill_list("Original Archive")
+        metadata["language"] = self._get_pill_list("Language")
+        metadata["rights"] = self._get_information_block("Rights")
+        metadata["record_id"] = self._get_information_block("Record ID")
+        metadata["original_classification"] = self._get_information_block(
+            "Original Classification"
+        )
+        metadata["donors"] = self._get_pill_list("Donor")
 
         return metadata
 
