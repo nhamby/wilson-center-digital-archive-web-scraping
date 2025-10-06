@@ -28,14 +28,6 @@ ENV/
 env/
 .venv
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# CSV export files
-*.csv
-
 # IDE
 .vscode/
 .idea/
@@ -52,3 +44,6 @@ Thumbs.db
 screenshots/
 downloads/
 downloaded_files/
+
+# Archives
+archives/

@@ -13,7 +13,7 @@ import sqlite3
 import sys
 import time
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 from seleniumbase import Driver
 
@@ -27,8 +27,8 @@ class WilsonArchiveScraper:
     def __init__(self, db_path: str = "wilson_archive.db"):
         """Initialize the scraper with database connection"""
         self.db_path = db_path
-        self.conn = None
-        self.driver = None
+        self.conn: Optional[sqlite3.Connection] = None
+        self.driver: Any = None  # SeleniumBase Driver type
         self._init_database()
 
     def _init_database(self):
@@ -41,6 +41,7 @@ class WilsonArchiveScraper:
             """
             CREATE TABLE IF NOT EXISTS documents (
                 document_url TEXT PRIMARY KEY,
+                page_number INTEGER,
                 original_publication_date TEXT,
                 title TEXT,
                 credits TEXT,
@@ -62,6 +63,14 @@ class WilsonArchiveScraper:
             )
         """
         )
+
+        # Add page_number column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE documents ADD COLUMN page_number INTEGER")
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
 
         # Create completed pages tracking table
         cursor.execute(
@@ -92,6 +101,7 @@ class WilsonArchiveScraper:
 
     def is_page_completed(self, page_number: int) -> bool:
         """Check if a page has already been scraped"""
+        assert self.conn is not None
         cursor = self.conn.cursor()
         cursor.execute(
             "SELECT 1 FROM completed_pages WHERE page_number = ?", (page_number,)
@@ -100,6 +110,7 @@ class WilsonArchiveScraper:
 
     def mark_page_completed(self, page_number: int):
         """Mark a page as completed"""
+        assert self.conn is not None
         cursor = self.conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO completed_pages (page_number, completed_at) VALUES (?, ?)",
@@ -331,19 +342,21 @@ class WilsonArchiveScraper:
 
     def save_document(self, metadata: Dict):
         """Save document metadata to database"""
+        assert self.conn is not None
         cursor = self.conn.cursor()
         cursor.execute(
             """
             INSERT OR REPLACE INTO documents (
-                document_url, original_publication_date, title, credits, text_body,
+                document_url, page_number, original_publication_date, title, credits, text_body,
                 summary, authors, associated_places, subjects_discussed,
                 associated_people_orgs, source, original_upload_date,
                 original_archive_title, language, rights, record_id,
                 original_classification, donors, scraped_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 metadata["document_url"],
+                metadata.get("page_number"),
                 metadata.get("original_publication_date"),
                 metadata.get("title"),
                 metadata.get("credits"),
@@ -392,8 +405,12 @@ class WilsonArchiveScraper:
             try:
                 print(f"\nDocument {i}/{len(document_links)}")
                 metadata = self.scrape_document(doc_url)
+                metadata["page_number"] = page_number  # Add page number to metadata
                 self.save_document(metadata)
                 time.sleep(1)  # Be polite to the server
+            except KeyboardInterrupt:
+                # Re-raise KeyboardInterrupt to stop gracefully
+                raise
             except Exception as e:
                 print(f"Error scraping document {doc_url}: {e}")
                 # Continue with next document
@@ -404,6 +421,7 @@ class WilsonArchiveScraper:
     def scrape_range(self, start_page: int = 0, end_page: int = 1615):
         """Scrape a range of pages"""
         print(f"Starting scraper for pages {start_page} to {end_page}")
+        print("Press Ctrl+C to stop gracefully...\n")
 
         self._init_driver()
 
@@ -411,9 +429,19 @@ class WilsonArchiveScraper:
             for page_num in range(start_page, end_page + 1):
                 try:
                     self.scrape_page(page_num)
+                except KeyboardInterrupt:
+                    print("\n\n" + "=" * 60)
+                    print("Received interrupt signal (Ctrl+C)")
+                    print("Stopping gracefully and saving progress...")
+                    print("=" * 60)
+                    raise  # Re-raise to be caught by outer try-except
                 except Exception as e:
                     print(f"Error processing page {page_num}: {e}")
                     # Continue with next page
+        except KeyboardInterrupt:
+            print("Cleanup in progress...")
+            self.get_stats()
+            print("\nScraping stopped by user. Progress has been saved.")
         finally:
             self._close_driver()
 
@@ -423,6 +451,7 @@ class WilsonArchiveScraper:
         """Export all documents from database to CSV"""
         print(f"Exporting data to {output_file}...")
 
+        assert self.conn is not None
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM documents ORDER BY document_url")
         rows = cursor.fetchall()
@@ -434,15 +463,52 @@ class WilsonArchiveScraper:
         # Get column names
         columns = [description[0] for description in cursor.description]
 
+        # Find the index of page_number column
+        page_number_idx = (
+            columns.index("page_number") if "page_number" in columns else None
+        )
+
+        # Add page indexed columns after page_number
+        if page_number_idx is not None:
+            insert_idx = page_number_idx + 1
+            columns.insert(insert_idx, "page_zero_indexed")
+            columns.insert(insert_idx + 1, "page_one_indexed")
+        else:
+            # If page_number doesn't exist, add at the beginning after document_url
+            columns.insert(1, "page_zero_indexed")
+            columns.insert(2, "page_one_indexed")
+
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(columns)
-            writer.writerows(rows)
+
+            # Write rows with additional page index columns
+            for row in rows:
+                row_list = list(row)
+                page_num = (
+                    row_list[page_number_idx] if page_number_idx is not None else None
+                )
+
+                if page_number_idx is not None:
+                    insert_idx = page_number_idx + 1
+                    # Insert page_zero_indexed (same as page_number)
+                    row_list.insert(insert_idx, page_num)
+                    # Insert page_one_indexed (page_number + 1)
+                    row_list.insert(
+                        insert_idx + 1, page_num + 1 if page_num is not None else None
+                    )
+                else:
+                    # If no page_number column, insert None values
+                    row_list.insert(1, None)
+                    row_list.insert(2, None)
+
+                writer.writerow(row_list)
 
         print(f"Exported {len(rows)} documents to {output_file}")
 
     def get_stats(self):
         """Print database statistics"""
+        assert self.conn is not None
         cursor = self.conn.cursor()
 
         cursor.execute("SELECT COUNT(*) FROM documents")
@@ -497,6 +563,9 @@ def main():
         else:
             scraper.scrape_range(args.start_page, args.end_page)
             scraper.get_stats()
+    except KeyboardInterrupt:
+        print("\n\nExiting...")
+        sys.exit(0)
     finally:
         scraper.close()
 
