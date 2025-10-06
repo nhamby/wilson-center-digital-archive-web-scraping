@@ -30,6 +30,7 @@ python scraper.py --help
 ## Common Workflows
 
 ### First Time Setup
+
 ```bash
 pip install -r requirements.txt
 python scraper.py --start-page 0 --end-page 5  # Test run
@@ -38,6 +39,7 @@ python scraper.py --export                       # Export test data
 ```
 
 ### Full Production Scrape
+
 ```bash
 python scraper.py                                # Start scraping
 # Wait (may take 4-8 hours)
@@ -46,6 +48,7 @@ python scraper.py --export                       # Export all data
 ```
 
 ### Interrupted Scrape Recovery
+
 ```bash
 python scraper.py --stats                       # Check what's done
 python scraper.py                                # Resume from where it left off
@@ -53,7 +56,7 @@ python scraper.py                                # Resume from where it left off
 
 ## File Structure
 
-```
+```md
 wilson-center-digital-archive-web-scraping/
 ├── scraper.py              # Main scraper script
 ├── requirements.txt        # Python dependencies
@@ -67,6 +70,7 @@ wilson-center-digital-archive-web-scraping/
 ## Database Schema Quick Reference
 
 ### documents table
+
 | Column | Type | Description |
 |--------|------|-------------|
 | document_url | TEXT (PK) | Full URL to document |
@@ -77,6 +81,7 @@ wilson-center-digital-archive-web-scraping/
 | ... | ... | (14 more fields) |
 
 ### completed_pages table
+
 | Column | Type | Description |
 |--------|------|-------------|
 | page_number | INTEGER (PK) | Page number |
@@ -85,6 +90,7 @@ wilson-center-digital-archive-web-scraping/
 ## Metadata Fields
 
 The scraper extracts **18 metadata fields** from each document:
+
 1. Document URL (unique identifier)
 2. Original Publication Date
 3. Title

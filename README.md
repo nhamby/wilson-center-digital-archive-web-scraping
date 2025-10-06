@@ -16,6 +16,7 @@ A web scraper for the Wilson Center Digital Archive using SeleniumBase to avoid 
 
 1. Install Python 3.7 or higher
 2. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -29,6 +30,7 @@ python scraper.py
 ```
 
 The scraper will:
+
 - Create a database file `wilson_archive.db` if it doesn't exist
 - Start from page 0 (or resume from where it left off)
 - Scrape each page and extract document metadata
@@ -78,22 +80,27 @@ This will use a custom database file instead of the default `wilson_archive.db`.
 ## Examples
 
 ### Full scrape from beginning
+
 ```bash
 python scraper.py
 ```
 
 ### Resume interrupted scrape
+
 If the scraper is interrupted, simply run it again. It will automatically skip completed pages:
+
 ```bash
 python scraper.py
 ```
 
 ### Scrape a small test batch
+
 ```bash
 python scraper.py --start-page 0 --end-page 5
 ```
 
 ### Export and analyze data
+
 ```bash
 python scraper.py --export
 # Now you can open wilson_archive.csv in Excel or other tools
@@ -128,6 +135,7 @@ For each document, the scraper extracts the following fields:
 ## Database Schema
 
 ### documents table
+
 Stores all document metadata with 19 columns (all fields listed above)
 
 **Primary Key**: `document_url`
@@ -135,7 +143,9 @@ Stores all document metadata with 19 columns (all fields listed above)
 Fields with multiple values (authors, places, subjects, people/orgs, donors) are stored as JSON arrays.
 
 ### completed_pages table
+
 Tracks which pages have been fully scraped:
+
 - `page_number` (INTEGER, PRIMARY KEY) - Page number that was completed
 - `completed_at` (TEXT) - ISO timestamp when page was completed
 
@@ -158,20 +168,24 @@ Tracks which pages have been fully scraped:
 ## Troubleshooting
 
 ### No documents found on a page
+
 - The page might not have loaded completely. The scraper waits 5 seconds after loading each page.
 - The CSS selectors might have changed. Check the website's HTML structure.
 - The website might be blocking the scraper (though SeleniumBase with UC mode should prevent this).
 
 ### Network errors
+
 - Ensure you have a stable internet connection
 - Some networks may block the Wilson Center domain
 - Check if a firewall or proxy is interfering
 
 ### Chrome/ChromeDriver issues
+
 - SeleniumBase manages ChromeDriver automatically
 - If you get driver errors, try: `pip install --upgrade seleniumbase`
 
 ### Database locked errors
+
 - Make sure no other process is accessing the database file
 - Close any SQLite browsers/viewers that might have the database open
 

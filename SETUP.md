@@ -38,6 +38,7 @@ pip install -r requirements.txt
 ```
 
 This will install SeleniumBase, which includes:
+
 - Selenium
 - Undetected ChromeDriver
 - Chrome browser management
@@ -62,6 +63,7 @@ python scraper.py --start-page 0 --end-page 5
 ```
 
 This will:
+
 1. Create a `wilson_archive.db` database file
 2. Scrape pages 0-5 (approximately 60 documents)
 3. Show progress as it runs
@@ -88,6 +90,7 @@ python scraper.py
 ```
 
 **Important Notes:**
+
 - This will take several hours to complete (estimated 4-8 hours depending on connection speed)
 - The database file will grow to approximately 500MB-1GB
 - The scraper is designed to be stopped and resumed at any time
@@ -127,7 +130,7 @@ python scraper.py --db my_archive.db --export
 
 ### During scraping
 
-```
+```md
 ============================================================
 Processing page 0
 ============================================================
@@ -144,7 +147,7 @@ Document 2/10
 
 ### After completion
 
-```
+```md
 Database Statistics:
   Documents scraped: 16160
   Pages completed: 1616
@@ -155,6 +158,7 @@ Database Statistics:
 ### "No module named 'seleniumbase'"
 
 Make sure you've installed the dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
@@ -162,6 +166,7 @@ pip install -r requirements.txt
 ### "Permission denied" errors
 
 Make sure you have write permissions in the current directory, or specify a database path where you have write access:
+
 ```bash
 python scraper.py --db ~/Documents/wilson_archive.db
 ```
@@ -169,6 +174,7 @@ python scraper.py --db ~/Documents/wilson_archive.db
 ### Chrome/ChromeDriver issues
 
 SeleniumBase manages ChromeDriver automatically. If you encounter issues:
+
 1. Make sure you have Chrome browser installed
 2. Update SeleniumBase: `pip install --upgrade seleniumbase`
 3. Try running once with visible browser to see what's happening: edit `scraper.py` and change `headless=True` to `headless=False`
@@ -176,6 +182,7 @@ SeleniumBase manages ChromeDriver automatically. If you encounter issues:
 ### Network timeouts
 
 If you're experiencing frequent timeouts:
+
 - Check your internet connection
 - Try increasing the sleep delays in the code
 - Make sure no firewall is blocking access
@@ -183,12 +190,14 @@ If you're experiencing frequent timeouts:
 ## Data Analysis
 
 Once you've exported to CSV, you can:
+
 - Open in Excel or Google Sheets for manual analysis
 - Use pandas in Python for data analysis
 - Import into a database for SQL queries
 - Create visualizations with tools like Tableau
 
 Example with pandas:
+
 ```python
 import pandas as pd
 import json
@@ -209,6 +218,7 @@ print(df['language'].value_counts().head())
 ## Next Steps
 
 After successful scraping:
+
 1. Back up your database file (`wilson_archive.db`)
 2. Export to CSV for analysis
 3. Consider adding custom analysis scripts for your specific use case
@@ -217,6 +227,7 @@ After successful scraping:
 ## Support
 
 For issues or questions:
+
 - Check the main README.md for more details
 - Open an issue on GitHub
 - Review the code comments in scraper.py
