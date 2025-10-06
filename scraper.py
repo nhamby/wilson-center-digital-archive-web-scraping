@@ -75,6 +75,8 @@ class WilsonArchiveScraper:
         """Initialize SeleniumBase driver with settings to avoid bot detection"""
         if self.driver is None:
             # SeleniumBase Driver with UC mode (undetected-chromedriver)
+            # uc=True uses undetected-chromedriver to bypass bot detection like triggerInterstitialChallenge()
+            # headless=True runs without visible browser window
             self.driver = Driver(uc=True, headless=True)
             print("SeleniumBase driver initialized with undetected mode")
     
@@ -106,14 +108,33 @@ class WilsonArchiveScraper:
         print(f"Accessing page {page_number}: {url}")
         
         self.driver.get(url)
-        time.sleep(2)  # Wait for page to load
+        time.sleep(5)  # Wait longer for page to load
         
         # Find all document links
-        # Using CSS selector: td.document.contextual-region a
         links = []
         try:
-            # Find all anchor tags within document cells
-            elements = self.driver.find_elements("css selector", "td.document.contextual-region a")
+            # Try multiple selectors to find document links
+            selectors = [
+                "td.document.contextual-region a",
+                "td.document a",
+                ".views-row a[href*='/document/']",
+                "a[href*='/document/']"
+            ]
+            
+            for selector in selectors:
+                try:
+                    elements = self.driver.find_elements("css selector", selector)
+                    if elements:
+                        print(f"Found {len(elements)} elements with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not elements:
+                # Debug: save page source to check what we got
+                print("No elements found with any selector. Checking page structure...")
+                page_source = self.driver.page_source[:1000]  # First 1000 chars
+                print(f"Page source preview: {page_source}")
             
             for element in elements:
                 href = element.get_attribute("href")
@@ -131,6 +152,8 @@ class WilsonArchiveScraper:
             print(f"Found {len(links)} document links on page {page_number}")
         except Exception as e:
             print(f"Error extracting links from page {page_number}: {e}")
+            import traceback
+            traceback.print_exc()
         
         return links
     
