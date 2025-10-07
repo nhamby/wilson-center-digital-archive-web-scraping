@@ -1,203 +1,350 @@
 # Wilson Center Digital Archive Web Scraper
 
-A web scraper for the Wilson Center Digital Archive using SeleniumBase to avoid bot detection.
+A Python web scraper for the [Wilson Center Digital Archive](https://digitalarchive.wilsoncenter.org) that extracts document metadata and full text content. Uses SeleniumBase with undetected-chromedriver mode to avoid bot detection.
+
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Test with a small sample (5 pages, ~50 documents)
+python main.py --start-page 0 --end-page 5
+
+# Check results
+python main.py --stats
+
+# Export to CSV
+python main.py --export
+```
 
 ## Features
 
-- **Bot Detection Avoidance**: Uses SeleniumBase with undetected-chromedriver mode to avoid triggering `triggerInterstitialChallenge()` functions
-- **Page-by-Page Scraping**: Scrapes search results from pages 0-1615 (10 documents per page, except the last)
-- **Complete Metadata Extraction**: Extracts 18 different metadata fields from each document
-- **SQLite Database Storage**: All data stored in a local SQLite database with proper schema
-- **Resume Capability**: Tracks completed pages to support resuming after interruption
-- **CSV Export**: Export all scraped data to CSV format for analysis
-- **Progress Tracking**: Shows real-time progress and statistics
+- **Bot Detection Avoidance**: Uses SeleniumBase UC mode to bypass anti-scraping measures
+- **Complete Metadata Extraction**: Captures 18+ fields including title, authors, places, subjects, full text, and more
+- **Resume Capability**: Automatically skips completed pages; safe to interrupt with Ctrl+C
+- **SQLite Database**: Local storage with proper schema and JSON arrays for multi-value fields
+- **CSV Export**: One-command export for analysis in Excel, Python, R, etc.
+- **Progress Tracking**: Real-time feedback and statistics
+
+## Table of Contents
+
+- [Installation](#installation)
+- [Basic Usage](#basic-usage)
+- [Command Reference](#command-reference)
+- [Project Structure](#project-structure)
+- [Database Schema](#database-schema)
+- [Metadata Fields](#metadata-fields)
+- [Architecture](#architecture)
+- [Programmatic Usage](#programmatic-usage)
 
 ## Installation
 
-1. Install Python 3.7 or higher
-2. Install dependencies:
+### Prerequisites
+
+- Python 3.7 or higher
+- Internet connection
+- ~1GB free disk space (for full database)
+
+### Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/nhamby/wilson-center-digital-archive-web-scraping.git
+cd wilson-center-digital-archive-web-scraping
+
+# (Optional) Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Verify installation
+python main.py --help
 ```
 
-## Usage
+## Basic Usage
 
-### Run the scraper
+### Run the Scraper
 
 ```bash
-python scraper.py
+# Scrape all pages (1615 pages, 16,153 documents, takes 4-8 hours)
+python main.py
+
+# Scrape specific page range
+python main.py --start-page 0 --end-page 10
+
+# Resume from specific page
+python main.py --start-page 500
 ```
 
 The scraper will:
 
-- Create a database file `wilson_archive.db` if it doesn't exist
-- Start from page 0 (or resume from where it left off)
-- Scrape each page and extract document metadata
-- Mark pages as complete in the database
-- Automatically skip pages that have already been completed
+- Create `wilson_archive.db` if it doesn't exist already
+- Extract metadata from each document
+- Track completed pages for resume capability
+- Handle Ctrl+C gracefully (progress is saved)
 
-### Export to CSV
-
-```bash
-python scraper.py --export
-```
-
-This will create a `wilson_archive.csv` file with all scraped documents.
-
-### Check statistics
+### Export Data
 
 ```bash
-python scraper.py --stats
+# Export to CSV (creates wilson_archive.csv)
+python main.py --export
+
+# Export with custom filename
+python main.py --export --db custom.db
 ```
 
-This will show how many documents and pages have been scraped.
-
-### Resume from specific page
+### Check Progress
 
 ```bash
-python scraper.py --start-page 100
+# Show statistics
+python main.py --stats
+
+# Output example:
+# Database Statistics:
+#   Documents scraped: 1250
+#   Pages completed: 125
 ```
 
-This will start scraping from page 100 through page 1615.
+## Command Reference
 
-### Scrape specific page range
+| Command | Description |
+|---------|-------------|
+| `python main.py` | Start/resume scraping all pages |
+| `python main.py --start-page N` | Start from page N |
+| `python main.py --end-page N` | End at page N |
+| `python main.py --start-page N --end-page M` | Scrape pages N through M |
+| `python main.py --export` | Export database to CSV |
+| `python main.py --stats` | Show scraping statistics |
+| `python main.py --db PATH` | Use custom database file |
+| `python main.py --help` | Show all options |
 
-```bash
-python scraper.py --start-page 100 --end-page 200
+## Project Structure
+
+```file tree
+wilson-center-digital-archive-web-scraping/
+├── main.py              # CLI entry point
+├── scraper.py           # Core WilsonArchiveScraper class
+├── requirements.txt     # Python dependencies
+├── wilson_archive.db    # SQLite database (auto-created)
+└── wilson_archive.csv   # CSV export (created with --export)
 ```
 
-This will only scrape pages 100-200.
+### File Purposes
 
-### Use custom database file
-
-```bash
-python scraper.py --db custom_archive.db
-```
-
-This will use a custom database file instead of the default `wilson_archive.db`.
-
-## Examples
-
-### Full scrape from beginning
-
-```bash
-python scraper.py
-```
-
-### Resume interrupted scrape
-
-If the scraper is interrupted, simply run it again. It will automatically skip completed pages:
-
-```bash
-python scraper.py
-```
-
-### Scrape a small test batch
-
-```bash
-python scraper.py --start-page 0 --end-page 5
-```
-
-### Export and analyze data
-
-```bash
-python scraper.py --export
-# Now you can open wilson_archive.csv in Excel or other tools
-```
-
-## Metadata Fields Extracted
-
-For each document, the scraper extracts the following fields:
-
-| Field | Description | HTML Selector | Multiple Values |
-|-------|-------------|---------------|-----------------|
-| Document URL | Full URL to the document | Constructed from href | No |
-| Original Publication Date | When document was originally published | `.date` | No |
-| Title | Document title | `.title` | No |
-| Credits | Credits information | `.donated` | No |
-| Text Body | Full text content | `.Textbody` | No |
-| Summary | Document summary | `.text-block` | No |
-| Authors | Document authors | `div.field--name-field-authors .name` | Yes (JSON array) |
-| Associated Places | Geographic locations | `div.field--name-field-places .name` | Yes (JSON array) |
-| Subjects Discussed | Topics covered | `div.field--name-field-topics .name` | Yes (JSON array) |
-| Associated People & Organizations | Related entities | `div.field--name-field-people-orgs .name` | Yes (JSON array) |
-| Source | Document source | `div.field--name-field-source .text` | No |
-| Original Upload Date | When uploaded to archive | `div.field--name-field-date-uploaded .text` | No |
-| Original Archive Title | Original archive name | `div.field--name-field-original-archive .name` | No |
-| Language | Document language | `div.field--name-field-language .name` | No |
-| Rights | Rights information | `div.field--name-field-rights .text` | No |
-| Record ID | Unique record identifier | `div.field--name-field-record-id .text` | No |
-| Original Classification | Classification level | `div.field--name-field-original-classification .text` | No |
-| Donors | Archive donors | `div.field--name-field-donors .name` | Yes (JSON array) |
-| Scraped At | Timestamp of scraping | Generated | No |
+- **`main.py`**: Command-line interface with argument parsing
+- **`scraper.py`**: Reusable scraper class with all business logic
 
 ## Database Schema
 
-### documents table
+### `documents` Table
 
-Stores all document metadata with 19 columns (all fields listed above)
+Stores all scraped document metadata. **Primary key**: `document_url`
 
-**Primary Key**: `document_url`
+| Column | Type | Description |
+|--------|------|-------------|
+| `document_url` | TEXT | Unique document URL (primary key) |
+| `page_number` | INTEGER | Search page where found |
+| `original_publication_date` | TEXT | Document's original date |
+| `title` | TEXT | Document title |
+| `credits` | TEXT | Credits/attribution |
+| `text_body` | TEXT | Full document text content |
+| `summary` | TEXT | Document summary |
+| `authors` | TEXT | JSON array of authors |
+| `associated_places` | TEXT | JSON array of geographic locations |
+| `subjects_discussed` | TEXT | JSON array of topics |
+| `associated_people_orgs` | TEXT | JSON array of people/organizations |
+| `source` | TEXT | Document source |
+| `original_upload_date` | TEXT | Upload date to archive |
+| `original_archive_title` | TEXT | Original archive name |
+| `language` | TEXT | JSON array of languages |
+| `rights` | TEXT | Rights information |
+| `record_id` | TEXT | Unique record identifier |
+| `original_classification` | TEXT | Classification level |
+| `donors` | TEXT | JSON array of donors |
+| `scraped_at` | TEXT | Timestamp when scraped |
 
-Fields with multiple values (authors, places, subjects, people/orgs, donors) are stored as JSON arrays.
+**Note**: Fields marked as JSON arrays are stored as JSON-encoded strings (e.g., `["English", "German"]`).
 
-### completed_pages table
+### `completed_pages` Table
 
-Tracks which pages have been fully scraped:
+Tracks scraping progress. **Primary key**: `page_number`
 
-- `page_number` (INTEGER, PRIMARY KEY) - Page number that was completed
-- `completed_at` (TEXT) - ISO timestamp when page was completed
+| Column | Type | Description |
+|--------|------|-------------|
+| `page_number` | INTEGER | Page number (0-1615) |
+| `completed_at` | TEXT | ISO timestamp when completed |
 
-## How It Works
+## Metadata Fields
 
-1. **Page Traversal**: The scraper loops through pages 0-1615 using the URL pattern `https://digitalarchive.wilsoncenter.org/search?page={N}`
+The scraper extracts **18 metadata fields** from each document:
 
-2. **Link Extraction**: On each search results page, it finds all document links by looking for anchor tags containing `/document/` in the href attribute
+**Core Fields:**
 
-3. **Metadata Scraping**: For each document link, it:
-   - Navigates to the document page
-   - Extracts all metadata fields using CSS selectors
-   - Handles multiple values (like authors) by storing them as JSON arrays
-   - Saves everything to the SQLite database
+- Document URL (unique identifier)
+- Title
+- Original Publication Date
+- Credits
+- Text Body (full content)
+- Summary
 
-4. **Progress Tracking**: After successfully scraping all documents on a page, it marks that page as completed in the `completed_pages` table
+**Categorization (Multi-value):**
 
-5. **Resume Support**: When restarted, the scraper checks which pages are already completed and skips them
+- Authors
+- Associated Places
+- Subjects Discussed
+- Associated People & Organizations
+- Donors
 
-## Troubleshooting
+**Archive Information:**
 
-### No documents found on a page
+- Source
+- Original Upload Date
+- Original Archive Title
+- Language
+- Rights
+- Record ID
+- Original Classification
 
-- The page might not have loaded completely. The scraper waits 5 seconds after loading each page.
-- The CSS selectors might have changed. Check the website's HTML structure.
-- The website might be blocking the scraper (though SeleniumBase with UC mode should prevent this).
+**Tracking:**
 
-### Network errors
+- Page Number (where document was found)
+- Scraped At (timestamp)
 
-- Ensure you have a stable internet connection
-- Some networks may block the Wilson Center domain
-- Check if a firewall or proxy is interfering
+## Architecture
 
-### Chrome/ChromeDriver issues
+### Data Flow
 
-- SeleniumBase manages ChromeDriver automatically
-- If you get driver errors, try: `pip install --upgrade seleniumbase`
+```data flow
+User → main.py (CLI) → scraper.py (WilsonArchiveScraper)
+                              ↓
+                        ┌─────┴─────┐
+                        ↓           ↓
+                  SeleniumBase   SQLite
+                   (Web Scraping) (Storage)
+                        ↓           ↓
+                  Wilson Center   wilson_archive.db
+                   Digital Archive
+```
 
-### Database locked errors
+### How It Works
 
-- Make sure no other process is accessing the database file
-- Close any SQLite browsers/viewers that might have the database open
+1. **Page Navigation**: Loops through search pages (0-1615)
+   - URL pattern: `https://digitalarchive.wilsoncenter.org/search?page={N}`
+   - Each page contains ~10 document links
 
-## Implementation Notes
+2. **Link Extraction**: Finds document links on each search page
+   - Selector: `td.document.contextual-region a`
+   - Extracts URLs containing `/document/`
 
-- **SeleniumBase with UC Mode**: Uses undetected-chromedriver mode to avoid bot detection mechanisms
-- **Headless Mode**: Runs in headless mode by default for efficiency
-- **Polite Scraping**: Includes 1-2 second delays between requests to be respectful to the server
-- **Error Handling**: Continues scraping even if individual documents fail
-- **Data Integrity**: Uses `INSERT OR REPLACE` to handle re-scraping of documents
-- **JSON Storage**: Multi-value fields stored as JSON arrays for easy parsing
+3. **Metadata Scraping**: For each document:
+   - Opens document page with SeleniumBase
+   - Extracts metadata using CSS selectors
+   - Uses helper methods for complex structures:
+     - `_get_text_safe()`: Single text values
+     - `_get_information_block()`: Information blocks
+     - `_get_pill_list()`: Multi-value pill lists
+   - Stores as JSON arrays for multi-value fields
+
+4. **Data Persistence**: Saves to SQLite database
+   - `INSERT OR REPLACE` for idempotency
+   - Marks page as completed after all documents saved
+
+5. **Resume Support**: Checks `completed_pages` on startup
+   - Automatically skips completed pages
+   - Graceful Ctrl+C handling saves progress
+
+### Key Design Features
+
+- **Separation of Concerns**: CLI (`main.py`) separate from logic (`scraper.py`)
+- **Bot Detection Avoidance**: SeleniumBase UC mode bypasses anti-scraping
+- **Polite Scraping**: 1-3 second delays between requests
+- **Error Handling**: Continues on individual document failures
+- **Idempotent Operations**: Re-scraping same document updates existing record
+
+## Programmatic Usage
+
+Import and use the scraper in your own Python scripts:
+
+```python
+from scraper import WilsonArchiveScraper
+
+# Initialize
+scraper = WilsonArchiveScraper('my_database.db')
+
+# Scrape pages
+scraper.scrape_range(0, 10)
+
+# Scrape single document
+doc = scraper.scrape_document('https://digitalarchive.wilsoncenter.org/document/...')
+print(f"Title: {doc['title']}")
+print(f"Summary: {doc['summary']}")
+
+# Check if page completed
+if scraper.is_page_completed(5):
+    print("Page 5 is done")
+
+# Export data
+scraper.export_to_csv('output.csv')
+
+# Get statistics
+scraper.get_stats()
+
+# Clean up
+scraper.close()
+```
+
+### Data Analysis Example
+
+```python
+import pandas as pd
+import json
+
+# Load exported CSV
+df = pd.read_csv('wilson_archive.csv')
+
+# Parse JSON fields
+df['authors_list'] = df['authors'].apply(
+    lambda x: json.loads(x) if pd.notna(x) else []
+)
+
+# Analyze
+print(f"Total documents: {len(df)}")
+print(f"Documents with authors: {df['authors'].notna().sum()}")
+print(f"\nTop languages:")
+print(df['language'].value_counts().head())
+```
+
+## Performance & Estimates
+
+- **Total Pages**: 1,616 (pages 0-1615)
+- **Documents per Page**: 10
+- **Total Documents**: 16,153
+- **Estimated Runtime**: 4-8 hours for full scrape
+- **Database Size**: ~500MB-1GB when complete
+
+## Tips & Best Practices
+
+- Start with a test run (5-10 pages)
+- Run overnight for full scrapes
+- Back up database file periodically
+- Use `--stats` to monitor progress
+- Export to CSV when complete
+
+## Ideas for the Future
+
+- Add progress bar (tqdm)
+- Implement logging module
+- Add retry logic for failed documents
+- Support for parallel scraping
+- Docker containerization
 
 ## License
 
 MIT License - See LICENSE file for details
+
+## Acknowledgments
+
+Data sourced from the [Wilson Center Digital Archive](https://digitalarchive.wilsoncenter.org). Please respect their Terms of Service and properly attribute data in any publications or analyses.

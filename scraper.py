@@ -2,15 +2,14 @@
 """
 Wilson Center Digital Archive Web Scraper
 
-This script scrapes documents from the Wilson Center Digital Archive using SeleniumBase
-to avoid bot detection. It stores data in a SQLite database and supports resuming.
+This module contains the WilsonArchiveScraper class for scraping documents
+from the Wilson Center Digital Archive using SeleniumBase to avoid bot detection.
+It stores data in a SQLite database and supports resuming.
 """
 
-import argparse
 import csv
 import json
 import sqlite3
-import sys
 import time
 from datetime import datetime
 from typing import List, Dict, Optional, Any
@@ -365,7 +364,6 @@ class WilsonArchiveScraper:
     def scrape_range(self, start_page: int = 0, end_page: int = 1615):
         """Scrape a range of pages"""
         print(f"Starting scraper for pages {start_page} to {end_page}")
-        print("Press Ctrl+C to stop gracefully...\n")
 
         self._init_driver()
 
@@ -376,20 +374,15 @@ class WilsonArchiveScraper:
                 except KeyboardInterrupt:
                     print("\n\n" + "=" * 60)
                     print("Received interrupt signal (Ctrl+C)")
-                    print("Stopping gracefully and saving progress...")
                     print("=" * 60)
                     raise  # Re-raise to be caught by outer try-except
                 except Exception as e:
                     print(f"Error processing page {page_num}: {e}")
                     # Continue with next page
         except KeyboardInterrupt:
-            print("Cleanup in progress...")
             self.get_stats()
-            print("\nScraping stopped by user. Progress has been saved.")
         finally:
             self._close_driver()
-
-        print("\nScraping completed!")
 
     def export_to_csv(self, output_file: str = "wilson_archive.csv"):
         """Export all documents from database to CSV"""
@@ -469,50 +462,3 @@ class WilsonArchiveScraper:
         """Close database connection"""
         if self.conn:
             self.conn.close()
-
-
-def main():
-    """Main entry point"""
-    parser = argparse.ArgumentParser(
-        description="Wilson Center Digital Archive Web Scraper"
-    )
-    parser.add_argument(
-        "--start-page", type=int, default=0, help="Starting page number (default: 0)"
-    )
-    parser.add_argument(
-        "--end-page", type=int, default=1615, help="Ending page number (default: 1615)"
-    )
-    parser.add_argument(
-        "--export", action="store_true", help="Export database to CSV and exit"
-    )
-    parser.add_argument(
-        "--db",
-        type=str,
-        default="wilson_archive.db",
-        help="Database file path (default: wilson_archive.db)",
-    )
-    parser.add_argument(
-        "--stats", action="store_true", help="Show database statistics and exit"
-    )
-
-    args = parser.parse_args()
-
-    scraper = WilsonArchiveScraper(db_path=args.db)
-
-    try:
-        if args.stats:
-            scraper.get_stats()
-        elif args.export:
-            scraper.export_to_csv()
-        else:
-            scraper.scrape_range(args.start_page, args.end_page)
-            scraper.get_stats()
-    except KeyboardInterrupt:
-        print("\n\nExiting...")
-        sys.exit(0)
-    finally:
-        scraper.close()
-
-
-if __name__ == "__main__":
-    main()
