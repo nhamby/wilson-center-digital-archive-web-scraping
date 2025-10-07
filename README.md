@@ -147,6 +147,8 @@ Stores all scraped document metadata. **Primary key**: `document_url`
 |--------|------|-------------|
 | `document_url` | TEXT | Unique document URL (primary key) |
 | `page_number` | INTEGER | Search page where found |
+| `page_number_one_indexed` | INTEGER | Search page where found |
+| `page_position` | INTEGER | Document position on search page |
 | `original_publication_date` | TEXT | Document's original date |
 | `title` | TEXT | Document title |
 | `credits` | TEXT | Credits/attribution |
@@ -156,6 +158,7 @@ Stores all scraped document metadata. **Primary key**: `document_url`
 | `associated_places` | TEXT | JSON array of geographic locations |
 | `subjects_discussed` | TEXT | JSON array of topics |
 | `associated_people_orgs` | TEXT | JSON array of people/organizations |
+| `document_contributors` | TEXT | JSON array of document contributors |
 | `source` | TEXT | Document source |
 | `original_upload_date` | TEXT | Upload date to archive |
 | `original_archive_title` | TEXT | Original archive name |
@@ -194,6 +197,7 @@ The scraper extracts **18 metadata fields** from each document:
 
 - Authors
 - Associated Places
+- Document Contributors
 - Subjects Discussed
 - Associated People & Organizations
 - Donors
@@ -211,6 +215,8 @@ The scraper extracts **18 metadata fields** from each document:
 **Tracking:**
 
 - Page Number (where document was found)
+- Page Number One Indexed (where document was found)
+- Page Position (where document was found)
 - Scraped At (timestamp)
 
 ## Architecture
