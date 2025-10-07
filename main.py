@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Main entry point for Wilson Center Digital Archive Web Scraper
 
@@ -46,7 +45,6 @@ def main():
             scraper.export_to_csv()
         else:
             scraper.scrape_range(args.start_page, args.end_page)
-            scraper.get_stats()
     except KeyboardInterrupt:
         print("\n\nExiting...")
         sys.exit(0)

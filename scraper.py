@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Wilson Center Digital Archive Web Scraper
 
@@ -27,7 +26,7 @@ class WilsonArchiveScraper:
         """Initialize the scraper with database connection"""
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
-        self.driver: Any = None  # SeleniumBase Driver type
+        self.driver: Any = None
         self._init_database()
 
     def _init_database(self):
@@ -35,12 +34,12 @@ class WilsonArchiveScraper:
         self.conn = sqlite3.connect(self.db_path)
         cursor = self.conn.cursor()
 
-        # Create documents table
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS documents (
                 document_url TEXT PRIMARY KEY,
                 page_number INTEGER,
+                page_position INTEGER,
                 original_publication_date TEXT,
                 title TEXT,
                 credits TEXT,
@@ -50,6 +49,7 @@ class WilsonArchiveScraper:
                 associated_places TEXT,
                 subjects_discussed TEXT,
                 associated_people_orgs TEXT,
+                document_contributors TEXT,
                 source TEXT,
                 original_upload_date TEXT,
                 original_archive_title TEXT,
@@ -63,15 +63,40 @@ class WilsonArchiveScraper:
         """
         )
 
-        # Add page_number column if it doesn't exist (for existing databases)
         try:
             cursor.execute("ALTER TABLE documents ADD COLUMN page_number INTEGER")
             self.conn.commit()
         except sqlite3.OperationalError:
-            # Column already exists
             pass
 
-        # Create completed pages tracking table
+        try:
+            cursor.execute(
+                "ALTER TABLE documents ADD COLUMN document_contributors TEXT"
+            )
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        try:
+            cursor.execute("ALTER TABLE documents ADD COLUMN page_position INTEGER")
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_documents_page_number 
+            ON documents(page_number)
+        """
+        )
+
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_documents_page_position 
+            ON documents(page_number, page_position)
+        """
+        )
+
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS completed_pages (
@@ -116,7 +141,6 @@ class WilsonArchiveScraper:
             (page_number, datetime.now().isoformat()),
         )
         self.conn.commit()
-        print(f"Page {page_number} marked as completed")
 
     def get_document_links(self, page_number: int) -> List[str]:
         """Extract document links from a search results page"""
@@ -124,12 +148,10 @@ class WilsonArchiveScraper:
         print(f"Accessing page {page_number}: {url}")
 
         self.driver.get(url)
-        time.sleep(5)  # Wait longer for page to load
+        time.sleep(5)
 
-        # Find all document links
         links = []
         try:
-            # Try multiple selectors to find document links
             selectors = [
                 "td.document.contextual-region a",
                 "td.document a",
@@ -149,21 +171,20 @@ class WilsonArchiveScraper:
                     continue
 
             if not elements:
-                # Debug: save page source to check what we got
                 print("No elements found with any selector. Checking page structure...")
-                page_source = self.driver.page_source[:1000]  # First 1000 chars
+                page_source = self.driver.page_source[:1000]
                 print(f"Page source preview: {page_source}")
 
             for element in elements:
                 href = element.get_attribute("href")
+
                 if href and "/document/" in href:
-                    # Handle relative URLs
+
                     if href.startswith("/"):
                         full_url = self.BASE_URL + href
                     else:
                         full_url = href
 
-                    # Avoid duplicates
                     if full_url not in links:
                         links.append(full_url)
 
@@ -210,25 +231,40 @@ class WilsonArchiveScraper:
     def _get_pill_list(self, title: str) -> Optional[str]:
         """Extract pill list items (authors, places, etc.) by section title"""
         try:
-            # Find all pill blocks AND information blocks (some pills are in information blocks)
+            h2_elements = self.driver.find_elements("css selector", "h2.title")
+            for h2 in h2_elements:
+                try:
+                    if title.lower() in h2.text.lower():
+                        next_elem = self.driver.execute_script(
+                            "return arguments[0].nextElementSibling;", h2
+                        )
+                        if next_elem:
+                            pills = self.driver.execute_script(
+                                'return Array.from(arguments[0].querySelectorAll(".pill .name span"));',
+                                next_elem,
+                            )
+                            if pills:
+                                names = [
+                                    p.text.strip() for p in pills if p.text.strip()
+                                ]
+                                return json.dumps(names) if names else None
+                except:
+                    continue
+
             blocks = self.driver.find_elements(
                 "css selector", ".pill-block, .information-block"
             )
             for block in blocks:
                 try:
-                    # Look for the title (h3.title for pill-blocks, h3.sub-title for information-blocks)
                     title_els = block.find_elements(
                         "css selector", "h3.title, h4.title, h3.sub-title"
                     )
                     for title_el in title_els:
                         if title.lower() in title_el.text.lower():
-                            # Found the right section, now get pill names
-                            # Try nested span first (for places, people)
                             pills = block.find_elements(
                                 "css selector", ".pill .name span"
                             )
                             if not pills:
-                                # Fall back to direct .name (for subjects, language)
                                 pills = block.find_elements(
                                     "css selector", ".pill .name"
                                 )
@@ -248,26 +284,24 @@ class WilsonArchiveScraper:
         print(f"Scraping document: {document_url}")
 
         self.driver.get(document_url)
-        time.sleep(3)  # Wait for page to load
+        time.sleep(3)
 
-        # Extract all metadata fields
         metadata = {
             "document_url": document_url,
             "original_publication_date": self._get_text_safe(".date"),
             "title": self._get_text_safe("h1.title"),
             "credits": self._get_text_safe(".donated"),
-            "text_body": self._get_text_safe(".tab-pane.active"),  # Full transcript
-            "summary": self._get_text_safe(".text-block"),  # Summary text
+            "text_body": self._get_text_safe(".tab-pane.active"),
+            "summary": self._get_text_safe(".text-block"),
             "scraped_at": datetime.now().isoformat(),
         }
 
-        # Extract data using the new helper methods
         metadata["authors"] = self._get_pill_list("Author")
         metadata["associated_places"] = self._get_pill_list("Associated Places")
         metadata["subjects_discussed"] = self._get_pill_list("Subjects Discussed")
         metadata["associated_people_orgs"] = self._get_pill_list("Associated People")
+        metadata["document_contributors"] = self._get_pill_list("Document Contributor")
 
-        # Extract information blocks
         metadata["source"] = self._get_information_block("Source")
         metadata["original_upload_date"] = self._get_information_block(
             "Original Uploaded Date"
@@ -290,16 +324,17 @@ class WilsonArchiveScraper:
         cursor.execute(
             """
             INSERT OR REPLACE INTO documents (
-                document_url, page_number, original_publication_date, title, credits, text_body,
+                document_url, page_number, page_position, original_publication_date, title, credits, text_body,
                 summary, authors, associated_places, subjects_discussed,
-                associated_people_orgs, source, original_upload_date,
+                associated_people_orgs, document_contributors, source, original_upload_date,
                 original_archive_title, language, rights, record_id,
                 original_classification, donors, scraped_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 metadata["document_url"],
                 metadata.get("page_number"),
+                metadata.get("page_position"),
                 metadata.get("original_publication_date"),
                 metadata.get("title"),
                 metadata.get("credits"),
@@ -309,6 +344,7 @@ class WilsonArchiveScraper:
                 metadata.get("associated_places"),
                 metadata.get("subjects_discussed"),
                 metadata.get("associated_people_orgs"),
+                metadata.get("document_contributors"),
                 metadata.get("source"),
                 metadata.get("original_upload_date"),
                 metadata.get("original_archive_title"),
@@ -325,41 +361,42 @@ class WilsonArchiveScraper:
 
     def scrape_page(self, page_number: int):
         """Scrape all documents from a single search results page"""
+        page_start_time = time.time()
+
         print(f"\n{'='*60}")
         print(f"Processing page {page_number}")
         print(f"{'='*60}")
 
-        # Check if page already completed
         if self.is_page_completed(page_number):
             print(f"Page {page_number} already completed, skipping...")
             return
 
-        # Get document links from the page
         document_links = self.get_document_links(page_number)
 
         if not document_links:
             print(f"No documents found on page {page_number}")
-            # Still mark as completed to avoid retrying empty pages
             self.mark_page_completed(page_number)
             return
 
-        # Scrape each document
         for i, doc_url in enumerate(document_links, 1):
             try:
                 print(f"\nDocument {i}/{len(document_links)}")
                 metadata = self.scrape_document(doc_url)
-                metadata["page_number"] = page_number  # Add page number to metadata
+                metadata["page_number"] = page_number
+                metadata["page_position"] = i
                 self.save_document(metadata)
-                time.sleep(1)  # Be polite to the server
+                time.sleep(1)
             except KeyboardInterrupt:
-                # Re-raise KeyboardInterrupt to stop gracefully
                 raise
             except Exception as e:
                 print(f"Error scraping document {doc_url}: {e}")
-                # Continue with next document
 
-        # Mark page as completed
         self.mark_page_completed(page_number)
+
+        page_elapsed_time = time.time() - page_start_time
+        minutes = int(page_elapsed_time // 60)
+        seconds = int(page_elapsed_time % 60)
+        print(f"Page {page_number} marked as completed ({minutes}m {seconds}s)")
 
     def scrape_range(self, start_page: int = 0, end_page: int = 1615):
         """Scrape a range of pages"""
@@ -372,54 +409,45 @@ class WilsonArchiveScraper:
                 try:
                     self.scrape_page(page_num)
                 except KeyboardInterrupt:
-                    print("\n\n" + "=" * 60)
-                    print("Received interrupt signal (Ctrl+C)")
-                    print("=" * 60)
-                    raise  # Re-raise to be caught by outer try-except
+                    raise
                 except Exception as e:
                     print(f"Error processing page {page_num}: {e}")
-                    # Continue with next page
         except KeyboardInterrupt:
             self.get_stats()
         finally:
             self._close_driver()
 
     def export_to_csv(self, output_file: str = "wilson_archive.csv"):
-        """Export all documents from database to CSV"""
-        print(f"Exporting data to {output_file}...")
+        """Export all documents from database to CSV ordered by page number and position"""
+        print(f"\nExporting data to {output_file}")
 
         assert self.conn is not None
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM documents ORDER BY document_url")
+        cursor.execute(
+            "SELECT * FROM documents ORDER BY page_number ASC, page_position ASC, document_url ASC"
+        )
         rows = cursor.fetchall()
 
         if not rows:
             print("No documents found in database")
             return
 
-        # Get column names
         columns = [description[0] for description in cursor.description]
 
-        # Find the index of page_number column
         page_number_idx = (
             columns.index("page_number") if "page_number" in columns else None
         )
 
-        # Add page indexed columns after page_number
         if page_number_idx is not None:
             insert_idx = page_number_idx + 1
-            columns.insert(insert_idx, "page_zero_indexed")
-            columns.insert(insert_idx + 1, "page_one_indexed")
+            columns.insert(insert_idx, "page_number_one_indexed")
         else:
-            # If page_number doesn't exist, add at the beginning after document_url
-            columns.insert(1, "page_zero_indexed")
-            columns.insert(2, "page_one_indexed")
+            columns.insert(1, "page_number_one_indexed")
 
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(columns)
 
-            # Write rows with additional page index columns
             for row in rows:
                 row_list = list(row)
                 page_num = (
@@ -428,20 +456,15 @@ class WilsonArchiveScraper:
 
                 if page_number_idx is not None:
                     insert_idx = page_number_idx + 1
-                    # Insert page_zero_indexed (same as page_number)
-                    row_list.insert(insert_idx, page_num)
-                    # Insert page_one_indexed (page_number + 1)
                     row_list.insert(
-                        insert_idx + 1, page_num + 1 if page_num is not None else None
+                        insert_idx, page_num + 1 if page_num is not None else None
                     )
                 else:
-                    # If no page_number column, insert None values
                     row_list.insert(1, None)
-                    row_list.insert(2, None)
 
                 writer.writerow(row_list)
 
-        print(f"Exported {len(rows)} documents to {output_file}")
+        print(f"Exported {len(rows)} documents to {output_file}\n")
 
     def get_stats(self):
         """Print database statistics"""
@@ -454,9 +477,9 @@ class WilsonArchiveScraper:
         cursor.execute("SELECT COUNT(*) FROM completed_pages")
         page_count = cursor.fetchone()[0]
 
-        print(f"\nDatabase Statistics:")
-        print(f"  Documents scraped: {doc_count}")
-        print(f"  Pages completed: {page_count}")
+        print(f"\n\nDatabase Statistics:")
+        print(f"    Documents scraped: {doc_count}")
+        print(f"    Pages completed: {page_count}\n")
 
     def close(self):
         """Close database connection"""
