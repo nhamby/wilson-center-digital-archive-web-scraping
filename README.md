@@ -8,13 +8,13 @@ A Python web scraper for the [Wilson Center Digital Archive](https://digitalarch
 # Install dependencies
 pip install -r requirements.txt
 
-# Test with a small sample (5 pages, ~50 documents)
-python main.py --start-page 0 --end-page 5
+# Run the scrape
+python main.py
 
 # Check results
 python main.py --stats
 
-# Export to CSV
+# Export database to CSV
 python main.py --export
 ```
 
